@@ -92,12 +92,19 @@ class InferenceEngine:
             self.model = self.model.to(self.device)
             self.model.eval()
             
-            # Torch Compile
-            if hasattr(torch, 'compile'):
+            # Torch Compile (only on GPU - skip on CPU/Windows to avoid C++ compiler requirement)
+            # torch.compile requires C++ compiler on CPU which causes issues on Windows
+            if (hasattr(torch, 'compile') and 
+                self.device == 'cuda' and 
+                torch.cuda.is_available() and 
+                'cuda' in str(next(self.model.parameters()).device)):
                 try:
+                    # Use 'reduce-overhead' mode which is more stable
                     self.model = torch.compile(self.model, mode="reduce-overhead")
-                except Exception as e:
-                    print(f"Warning: torch.compile failed: {e}. Continuing without compilation.")
+                except Exception:
+                    # Silently continue without compilation if it fails
+                    # Common reasons: CUDA version mismatch, etc.
+                    pass
             
             # Half Precision FP16/BF16
             if self.device == 'cuda' and torch.cuda.is_available():
